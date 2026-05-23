@@ -1,7 +1,11 @@
 import java.util.*;
 
 boolean paused = false;
+boolean makingTrack = false;
+float trackX, trackY;
+
 ArrayList<Ball> balls = new ArrayList<Ball>();
+ArrayList<Track> tracks = new ArrayList<Track>();
 
 void setup() {
   size(800, 800);
@@ -35,6 +39,14 @@ void draw() {
   // Display the balls
   for (Ball b : balls) {
     b.display();
+  }
+  
+  for (Track t : tracks) {
+    t.display();
+  }
+  
+  if (makingTrack) {
+    line(trackX, trackY, mouseX, mouseY);
   }
 }
 
@@ -70,18 +82,62 @@ void mousePressed() {
   }
 
   // If over the clear button
-  if (overButton(120, 10, 100, 30)) {
+  else if (overButton(120, 10, 100, 30)) {
     balls.clear();
+    tracks.clear();
     return;
   }
 
   // If over the pause button
-  if (overButton(230, 10, 100, 30)) {
+  else if (overButton(230, 10, 100, 30)) {
     paused = !paused;
     return;
   }
+  
+  else {
+    makingTrack = true;
+    trackX = mouseX;
+    trackY = mouseY;
+  }
 }
 
+void mouseDragged() {
+  if (makingTrack) {
+    float dx = mouseX - trackX;
+    float dy = mouseY - trackY;
+
+    // Only add a new segment if the mouse moved at least 32 pixels, for preformance
+    if (dx * dx + dy * dy >= 32 * 32) {
+      tracks.add(new Track(trackX, trackY, mouseX, mouseY));
+      trackX = mouseX;
+      trackY = mouseY;
+    }
+  }
+}
+
+void mouseReleased() {
+  makingTrack = false;
+}
+
+// Track class
+class Track {
+  float xStart;
+  float yStart;
+  float xEnd;
+  float yEnd;
+  
+  // Constructor
+  Track(float xs, float ys, float xe, float ye) {
+    this.xStart = xs;
+    this.yStart = ys;
+    this.xEnd = xe;
+    this.yEnd = ye;
+  }
+  
+  void display() {
+    line(xStart, yStart, xEnd, yEnd);
+  }
+}
 
 // Ball class
 class Ball {
@@ -138,8 +194,75 @@ class Ball {
     }
   }
 
-  // Handles collisions between this ball and every other ball
+  // Handles collisions between this ball and every other ball and tracks
   void checkCollision() {
+     for (Track t : tracks) {
+      // Direction vector of the track segment
+      float tx = t.xEnd - t.xStart;
+      float ty = t.yEnd - t.yStart;
+    
+      // Squared length of the segment
+      float lengthSquared = tx * tx + ty * ty;
+    
+      // Skip invalid zero-length tracks
+      if (lengthSquared == 0) {
+        continue;
+      }
+    
+      // Project the ball center onto the track line
+      // u tells us how far along the segment the closest point is
+      float u = ((this.x - t.xStart) * tx + (this.y - t.yStart) * ty) / lengthSquared;
+    
+      // Clamp so the closest point stays on the actual segment
+      u = constrain(u, 0, 1);
+    
+      // Coordinates of the closest point on the track
+      float closestX = t.xStart + u * tx;
+      float closestY = t.yStart + u * ty;
+    
+      // Vector from closest point to ball center
+      float dx = this.x - closestX;
+      float dy = this.y - closestY;
+    
+      // Squared distance from ball center to track
+      float distanceSquared = dx * dx + dy * dy;
+    
+      // Collision happens if the ball overlaps the track
+      if (distanceSquared <= this.radius * this.radius) {
+        float distance = sqrt(distanceSquared);
+    
+        // Prevent division by zero if the center lands exactly on the line
+        if (distance == 0) {
+          distance = 0.01;
+    
+          // Use a perpendicular direction instead
+          dx = -ty;
+          dy = tx;
+        }
+    
+        // Unit normal vector pointing away from the track
+        float nx = dx / distance;
+        float ny = dy / distance;
+    
+        // Amount the ball is stuck inside the track
+        float overlap = this.radius - distance;
+    
+        // Push the ball out so it no longer overlaps
+        this.x += nx * overlap;
+        this.y += ny * overlap;
+    
+        // Velocity component moving into the track
+        float speedIntoTrack = this.vx * nx + this.vy * ny;
+    
+        // Only bounce if the ball is moving toward the track
+        if (speedIntoTrack < 0) {
+          // Reflect velocity with slight energy loss
+          this.vx -= 1.8 * speedIntoTrack * nx;
+          this.vy -= 1.8 * speedIntoTrack * ny;
+        }
+      }
+    }
+    
     for (Ball b : balls) {
       if (b == this) {
         continue;
