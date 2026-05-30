@@ -1,34 +1,25 @@
 // Isaiah Hamblin
-// Last Edit 5/21/2026
+// Last Edit 5/29/2026
 // Track class includes constructors and display method
 
 class Track {
   int id;
   
-  float xStart;
-  float yStart;
-  float xEnd;
-  float yEnd;
+  PVector start;
+  PVector end;
 
-  // Change in x and y
-  float tx;
-  float ty;
   float lengthSquared;
 
   // Build track from point a to point b
   Track(float xs, float ys, float xe, float ye) {
-    this.xStart = xs;
-    this.yStart = ys;
-    this.xEnd = xe;
-    this.yEnd = ye;
+    start = new PVector(xs, ys);
+    end = new PVector(xe, ye);
 
-    this.tx = this.xEnd - this.xStart;
-    this.ty = this.yEnd - this.yStart;
-    this.lengthSquared = this.tx * this.tx + this.ty * this.ty;
+    this.lengthSquared = PVector.sub(start, end).magSq();
   }
   
   // Draws line on sketch
   void display() {
-    line(xStart, yStart, xEnd, yEnd);
+    line(start.x, start.y, end.x, end.y);
   }
 }

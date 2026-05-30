@@ -1,5 +1,5 @@
 // Isaiah Hamblin
-// Last Edit: 5/22/2026
+// Last Edit: 5/29/2026
 // This file serves as the backbone for the project, keeping track of spacial grids, creating tracks, buttons, adding balls, graphics, etc.
 
 import java.util.*;
@@ -7,10 +7,18 @@ import java.util.*;
 int lastTime;
 boolean paused = false;
 boolean makingTrack = false;
+boolean erasing = false;
 float trackX, trackY;
+
+boolean menuOpen = false;
+boolean wasPausedBeforeMenu = false;
+
+PImage gearIcon;
 
 int cellSize = 64;
 int nextBallId = 0;
+
+PVector globalAcc;
 
 ArrayList<Ball> balls = new ArrayList<Ball>();
 ArrayList<Track> tracks = new ArrayList<Track>();
@@ -23,12 +31,15 @@ HashMap<String, ArrayList<Track>> trackGrid = new HashMap<String, ArrayList<Trac
 
 // setup() runs when the program first starts
 void setup() {
-  // Sets size, background color, framerate, and initilizes lastTime
+  // Sets size, background color, framerate, gravity, and initilizes lastTime
   size(800, 600, P2D);
   background(255);
   frameRate(60);
+  globalAcc = new PVector(0, 700);
   // How many miliseconds the program has run for
   lastTime = millis();
+  
+  gearIcon = loadImage("gear.png");
   
   // Sets up trackLayer
   trackLayer = createGraphics(width, height);
@@ -39,13 +50,19 @@ void setup() {
 
 // draw() runs each frame
 void draw() {
-  
   // Clear screen and add buttons
   background(255);
   drawButton(10, 10, 100, 30, "Add Ball");
   drawButton(120, 10, 100, 30, "Clear");
   drawButton(230, 10, 100, 30, paused ? "Resume" : "Pause");
-
+  drawButton(340, 10, 100, 30, erasing ? "Draw" : "Erase");
+  
+  // Draw gear button
+  fill(200);
+  rect(width - 46, 10, 36, 36);
+  image(gearIcon, width - 40, 16, 24, 24);
+  fill(0);
+  
   // Calculate the time that has passed sense last call of draw()
   int currentTime = millis();
   float dt = (currentTime - lastTime) / 1000.0;
@@ -84,6 +101,16 @@ void draw() {
   if (makingTrack) {
     line(trackX, trackY, mouseX, mouseY);
   }
+  
+  // Display something else if menu is open
+  if (menuOpen) {
+    // Dim background
+    fill(0, 128);
+    rect(0, 0, width, height);
+    
+    // Menu buttons
+    // To implement
+  }
 }
 
 // Helper method, makes a button
@@ -104,67 +131,108 @@ boolean overButton(int x, int y, int w, int h) {
 
 // Runs when the mouse is pressed
 void mousePressed() {
-  // Makes a new ball if over add ball button
-  if (overButton(10, 10, 100, 30)) {
-    // Random start pos, velocity, and radius
-    balls.add(new Ball(
-      nextBallId++,
-      (float)(Math.random() * 700 + 50),
-      (float)(Math.random() * 500 + 50),
-      (float)(Math.random() * 300 - 150),
-      (float)(Math.random() * 300 - 150),
-      (int)(Math.random() * 15 + 5)
-    ));
-    return;
+  if (!menuOpen) {
+    // Makes a new ball if over add ball button
+    if (overButton(10, 10, 100, 30)) {
+      // Random start pos, velocity, and radius
+      balls.add(new Ball(
+        nextBallId++,
+        (float)(Math.random() * 700 + 50),
+        (float)(Math.random() * 500 + 50),
+        (float)(Math.random() * 300 - 150),
+        (float)(Math.random() * 300 - 150),
+        (int)(Math.random() * 15 + 5)
+      ));
+      return;
+    }
+    
+    // Toggles erasing mode if over button
+    else if (overButton(340, 10, 100, 30)) {
+      erasing = !erasing;
+      return;
+    }
+  
+    // Clears everything if over clear button
+    else if (overButton(120, 10, 100, 30)) {
+      balls.clear();
+      tracks.clear();
+      ballGrid.clear();
+      trackGrid.clear();
+      trackLayer.beginDraw();
+      trackLayer.clear();
+      trackLayer.endDraw();
+      nextBallId = 0;
+      return;
+    }
+  
+    // Pauses or resumes if over pause button
+    else if (overButton(230, 10, 100, 30)) {
+      paused = !paused;
+      return;
+    }
+    
+    else if (overButton(width - 46, 10 , 36, 36)) {
+      wasPausedBeforeMenu = paused;
+      paused = true;
+      menuOpen = true;
+      return;
+    }
+  
+    // Start making a track
+    else if (!erasing) {
+      makingTrack = true;
+      trackX = mouseX;
+      trackY = mouseY;
+    }
   }
-
-  // Clears everything if over clear button
-  else if (overButton(120, 10, 100, 30)) {
-    balls.clear();
-    tracks.clear();
-    ballGrid.clear();
-    trackGrid.clear();
-    trackLayer.beginDraw();
-    trackLayer.clear();
-    trackLayer.endDraw();
-    nextBallId = 0;
-    return;
-  }
-
-  // Pauses or resumes if over pause button
-  else if (overButton(230, 10, 100, 30)) {
-    paused = !paused;
-    return;
-  }
-
-  // Start making a track
   else {
-    makingTrack = true;
-    trackX = mouseX;
-    trackY = mouseY;
+    // Menu buttons
+    // To implement
   }
 }
 
 // Runs whenever the mouse is dragged
 void mouseDragged() {
-  if (makingTrack) {
-    // Figure out how long the track currently is
-    float dx = mouseX - trackX;
-    float dy = mouseY - trackY;
-
-    // Make the track if it is longer than 4 pixels (using pythag!)
-    if (dx * dx + dy * dy >= 4 * 4){
-      Track t = new Track(trackX, trackY, mouseX, mouseY);
-      tracks.add(t);
-      addTrackToGrid(t);
-
-      // Start drawing a new track
-      trackLayer.beginDraw();
-      trackLayer.line(trackX, trackY, mouseX, mouseY);
-      trackLayer.endDraw();
-
-      trackX = mouseX;
-      trackY = mouseY;
+  if (!menuOpen) {
+    if (makingTrack) {
+      // Figure out how long the track currently is
+      float dx = mouseX - trackX;
+      float dy = mouseY - trackY;
+  
+      // Make the track if it is longer than 4 pixels (using pythag!)
+      if (dx * dx + dy * dy >= 4 * 4){
+        Track t = new Track(trackX, trackY, mouseX, mouseY);
+        tracks.add(t);
+        addTrackToGrid(t);
+  
+        // Start drawing a new track
+        trackLayer.beginDraw();
+        trackLayer.line(trackX, trackY, mouseX, mouseY);
+        trackLayer.endDraw();
+  
+        trackX = mouseX;
+        trackY = mouseY;
+      }
+    }
+    
+    if (erasing) {
+      // Keep track of which track segments to remove
+      HashSet<Track> toRemove = new HashSet<Track>();
+      
+      int cx = floor(mouseX / cellSize);
+      int cy = floor(mouseY / cellSize);
+  
+      String curKey = cellKey(cx, cy);
+      
+      // Mark all the tracks in this cell to remove them
+      if (trackGrid.keySet().contains(curKey)) {
+        for (Track t : trackGrid.get(curKey)) {
+          toRemove.add(t);
+        }
+        // Remove tracks and redraw track grid
+        tracks.removeAll(toRemove);
+        rebuildTrackGrid();
+      }
     }
   }
 }
@@ -186,8 +254,8 @@ void buildBallGrid() {
 
   for (Ball b : balls) {
     // Get a cell key for the ball
-    int cx = floor(b.x / cellSize);
-    int cy = floor(b.y / cellSize);
+    int cx = floor(b.pos.x / cellSize);
+    int cy = floor(b.pos.y / cellSize);
     String key = cellKey(cx, cy);
 
     // Use a HashMap to keep track of which cell balls are in
@@ -201,10 +269,10 @@ void buildBallGrid() {
 // Adds a track to the spacial grid
 void addTrackToGrid(Track t) {
   // Figure out the min and max x and y of this track
-  int minCX = floor(min(t.xStart, t.xEnd) / cellSize);
-  int maxCX = floor(max(t.xStart, t.xEnd) / cellSize);
-  int minCY = floor(min(t.yStart, t.yEnd) / cellSize);
-  int maxCY = floor(max(t.yStart, t.yEnd) / cellSize);
+  int minCX = floor(min(t.start.x, t.end.x) / cellSize);
+  int maxCX = floor(max(t.start.x, t.end.x) / cellSize);
+  int minCY = floor(min(t.start.y, t.end.y) / cellSize);
+  int maxCY = floor(max(t.start.y, t.end.y) / cellSize);
 
   // Add the track to each cell it is in, this works because tracks are 4 pixels max
   // Cells are 64 pixels wide, this code would need to be updated if cell size was decreased or if track sizes were increased
@@ -221,12 +289,34 @@ void addTrackToGrid(Track t) {
   }
 }
 
+// Rebuild the track grid and PGraphics layer
+void rebuildTrackGrid() {
+  // Clear and repopulate the spacial grid
+  trackGrid.clear();
+  for (Track t : tracks) {
+    addTrackToGrid(t);
+  }
+  
+  // Clear and redraw the PGraphic
+  trackLayer.beginDraw();
+  trackLayer.clear();
+  for (Track t : tracks) {
+    trackLayer.line(
+      t.start.x,
+      t.start.y,
+      t.end.x,
+      t.end.y
+    );
+  }
+  trackLayer.endDraw();
+}
+
 // Calculates collisions between balls
 void checkNearbyBallCollisions() {
   for (Ball b : balls) {
     // Figure out which cell we are in
-    int cx = floor(b.x / cellSize);
-    int cy = floor(b.y / cellSize);
+    int cx = floor(b.pos.x / cellSize);
+    int cy = floor(b.pos.y / cellSize);
 
     // Check the surrounding cells
     for (int gx = cx - 1; gx <= cx + 1; gx++) {
