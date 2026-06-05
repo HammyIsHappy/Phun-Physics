@@ -34,22 +34,22 @@ class Ball {
       // Clip ball back in
       pos.x = width - radius;
       // Energy loss
-      vel.x *= -0.9;
+      vel.x *= -wallBounce;
     }
 
     if (pos.x - radius < 0) {
       pos.x = radius;
-      vel.x *= -0.9;
+      vel.x *= -wallBounce;
     }
 
     if (pos.y + radius > height) {
       pos.y = height - radius;
-      vel.y *= -0.9;
+      vel.y *= -wallBounce;
     }
 
     if (pos.y - radius < 0) {
       pos.y = radius;
-      vel.y *= -0.9;
+      vel.y *= -wallBounce;
     }
   }
 
@@ -62,7 +62,7 @@ class Ball {
     // Check all nearby cells
     for (int gx = cx - 1; gx <= cx + 1; gx++) {
       for (int gy = cy - 1; gy <= cy + 1; gy++) {
-        String key = cellKey(gx, gy);
+        int key = cellKey(gx, gy);
 
         if (!trackGrid.containsKey(key)) continue;
         
@@ -75,18 +75,15 @@ class Ball {
   
   // Handles track collisions
   void checkTrackCollision(Track t) {
+    // If a track with length 0 somehow exists just ignore it
     if (t.lengthSquared == 0) return;
   
-    PVector trackStart = t.start;
     PVector trackVector = PVector.sub(t.end, t.start);
   
-    float u = PVector.sub(pos, trackStart).dot(trackVector) / t.lengthSquared;
+    float u = PVector.sub(pos, t.start).dot(trackVector) / t.lengthSquared;
     u = constrain(u, 0, 1);
   
-    PVector closestPoint = PVector.add(
-      trackStart,
-      PVector.mult(trackVector, u)
-    );
+    PVector closestPoint = PVector.add(t.start, PVector.mult(trackVector, u));
   
     PVector delta = PVector.sub(pos, closestPoint);
   
@@ -150,7 +147,7 @@ class Ball {
       float m1 = radius * radius;
       float m2 = b.radius * b.radius;
   
-      float impulse = (2 * speed) / (m1 + m2);
+      float impulse = ((1 + elasticity) * speed) / (m1 + m2);
   
       PVector impulseVector = PVector.mult(normal, impulse);
   

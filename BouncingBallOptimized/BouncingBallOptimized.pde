@@ -13,26 +13,33 @@ float trackX, trackY;
 boolean menuOpen = false;
 boolean wasPausedBeforeMenu = false;
 
+boolean debug = false;
+
 PImage gearIcon;
 
 int cellSize = 64;
 int nextBallId = 0;
 
 PVector globalAcc;
+float wallBounce = 0.75;
+float elasticity = 1.0;
 
 ArrayList<Ball> balls = new ArrayList<Ball>();
 ArrayList<Track> tracks = new ArrayList<Track>();
+int ballCount = 0;
+int trackCount = 0;
 
 // Use one drawing to display all tracks rather than rendering each track each frame
 PGraphics trackLayer;
 
-HashMap<String, ArrayList<Ball>> ballGrid = new HashMap<String, ArrayList<Ball>>();
-HashMap<String, ArrayList<Track>> trackGrid = new HashMap<String, ArrayList<Track>>();
+HashMap<Integer, ArrayList<Ball>> ballGrid = new HashMap<Integer, ArrayList<Ball>>();
+HashMap<Integer, ArrayList<Track>> trackGrid = new HashMap<Integer, ArrayList<Track>>();
 
 // setup() runs when the program first starts
 void setup() {
   // Sets size, background color, framerate, gravity, and initilizes lastTime
   size(800, 600, P2D);
+  surface.setResizable(true);
   background(255);
   frameRate(60);
   globalAcc = new PVector(0, 700);
@@ -50,8 +57,23 @@ void setup() {
 
 // draw() runs each frame
 void draw() {
-  // Clear screen and add buttons
+  // Clear screen
   background(255);
+  
+  // Display the tracks
+  image(trackLayer, 0, 0);
+
+  // Display the balls
+  for (Ball b : balls) {
+    b.display();
+  }
+
+  // Show a line of where the track will go as it is being made
+  if (makingTrack) {
+    line(trackX, trackY, mouseX, mouseY);
+  }
+  
+  // Draw buttons
   drawButton(10, 10, 100, 30, "Add Ball");
   drawButton(120, 10, 100, 30, "Clear");
   drawButton(230, 10, 100, 30, paused ? "Resume" : "Pause");
@@ -70,37 +92,62 @@ void draw() {
   // If lag prevent large jumps in time
   dt = min(dt, 0.03);
 
+  // Debug menu
+  if (debug) {
+    trackCount = countTracks();
+    fill(0, 255, 128);
+    text("Ball Count: " + ballCount, 50, height - 20);
+    text("Track Count: " + trackCount, 50, height - 40);
+  }
+  fill(0);
+
   if (!paused) {
-    // Update ball locations
-    for (Ball b : balls) {
-      b.updateVectors(dt);
-      b.checkWalls();
+    // Calculate how many sub-frames we need and cap it at 6
+    // Don't allow frames where a ball moves more than 5 pixels because that is the smallest possible radius
+    int steps = ceil(maxBallSpeed() * dt / 5.0);
+    steps = constrain(steps, 1, 6);
+    
+    float subDt = dt / steps;
+    
+    // Do this for every sub-frame
+    for (int i = 0; i < steps; i++) {
+      for (Ball b : balls) {
+        b.updateVectors(subDt);
+        b.checkWalls();
+      }
+    
+      buildBallGrid();
+    
+      for (Ball b : balls) {
+        b.checkNearbyTrackCollisions();
+      }
+    
+      checkNearbyBallCollisions();
     }
-
-    // Build spacial grid to optimize collisions
-    buildBallGrid();
-
-    // Check balls for track collisions
-    for (Ball b : balls) {
-      b.checkNearbyTrackCollisions();
-    }
-
-    // Check for ball collisions
-    checkNearbyBallCollisions();
+    
+    
+    // Legacy Code: runs faster but balls would sometimes clip through walls
+    /*
+      // Update ball locations
+      for (Ball b : balls) {
+        b.updateVectors(dt);
+        b.checkWalls();
+      }
+  
+      // Build spacial grid to optimize collisions
+      buildBallGrid();
+  
+      // Check balls for track collisions
+      for (Ball b : balls) {
+        b.checkNearbyTrackCollisions();
+      }
+  
+      // Check for ball collisions
+      checkNearbyBallCollisions();
+    */
   }
 
-  // Display the tracks
-  image(trackLayer, 0, 0);
 
-  // Display the balls
-  for (Ball b : balls) {
-    b.display();
-  }
-
-  // Show a line of where the track will go as it is being made
-  if (makingTrack) {
-    line(trackX, trackY, mouseX, mouseY);
-  }
   
   // Display something else if menu is open
   if (menuOpen) {
@@ -109,7 +156,26 @@ void draw() {
     rect(0, 0, width, height);
     
     // Menu buttons
-    // To implement
+    drawButton(300, 200, 200, 40, "Gravity: " + (int) (globalAcc.y / 7) + "%");
+    drawButton(250, 200, 40, 40, "-");
+    drawButton(510, 200, 40, 40, "+");
+    drawButton(300, 250, 200, 40, "Wind: " + (int) (globalAcc.x / 7) + "%");
+    drawButton(250, 250, 40, 40, "-");
+    drawButton(510, 250, 40, 40, "+");
+    drawButton(300, 300, 200, 40, "Wall Bounce: " + (int) (wallBounce * 100) + "%");
+    drawButton(250, 300, 40, 40, "-");
+    drawButton(510, 300, 40, 40, "+");
+    drawButton(300, 350, 200, 40, "Ball Elasticity: " + (int) (elasticity * 100) + "%");
+    drawButton(250, 350, 40, 40, "-");
+    drawButton(510, 350, 40, 40, "+");
+    drawButton(300, 400, 200, 40, "Resume");
+    
+    // Display energy warning
+    if (elasticity > 1 || wallBounce == 1) {
+        fill(0);
+        textAlign(CENTER, CENTER);
+        text("Warning - Energy will explode", 400, 180);
+    }
   }
 }
 
@@ -143,6 +209,7 @@ void mousePressed() {
         (float)(Math.random() * 300 - 150),
         (int)(Math.random() * 15 + 5)
       ));
+      ballCount++;
       return;
     }
     
@@ -162,6 +229,8 @@ void mousePressed() {
       trackLayer.clear();
       trackLayer.endDraw();
       nextBallId = 0;
+      ballCount = 0;
+      trackCount = 0;
       return;
     }
   
@@ -171,6 +240,7 @@ void mousePressed() {
       return;
     }
     
+    // Opens menu
     else if (overButton(width - 46, 10 , 36, 36)) {
       wasPausedBeforeMenu = paused;
       paused = true;
@@ -187,7 +257,45 @@ void mousePressed() {
   }
   else {
     // Menu buttons
-    // To implement
+    
+    // Gravity
+    if (overButton(250, 200, 40, 40) && globalAcc.y > -1400) {
+      globalAcc.y -= 350;
+    }
+    if (overButton(510, 200, 40, 40) && globalAcc.y < 1400) {
+      globalAcc.y += 350;
+    }
+    
+    // Wind
+    if (overButton(250, 250, 40, 40) && globalAcc.x > -1400) {
+      globalAcc.x -= 350;
+    }
+    if (overButton(510, 250, 40, 40) && globalAcc.x < 1400) {
+      globalAcc.x += 350;
+    }
+    
+    // Wall Bounce
+    if (overButton(250, 300, 40, 40) && wallBounce > 0) {
+      wallBounce -= 0.25;
+    }
+    if (overButton(510, 300, 40, 40) && wallBounce < 1) {
+      wallBounce += 0.25;
+    }
+    
+    // Elasticity between balls
+    if (overButton(250, 350, 40, 40) && elasticity > 0) {
+      elasticity -= 0.25;
+    }
+    if (overButton(510, 350, 40, 40) && elasticity < 2) {
+      elasticity += 0.25;
+    }
+         
+    // Resume
+    if (overButton(300, 400, 200, 40)) {
+      menuOpen = false;
+      paused = wasPausedBeforeMenu;
+      return;
+    }
   }
 }
 
@@ -222,7 +330,7 @@ void mouseDragged() {
       int cx = floor(mouseX / cellSize);
       int cy = floor(mouseY / cellSize);
   
-      String curKey = cellKey(cx, cy);
+      int curKey = cellKey(cx, cy);
       
       // Mark all the tracks in this cell to remove them
       if (trackGrid.keySet().contains(curKey)) {
@@ -244,8 +352,8 @@ void mouseReleased() {
 }
 
 // Returns a cell key
-String cellKey(int cx, int cy) {
-  return cx + "," + cy;
+int cellKey(int cx, int cy) {
+  return (cx * 100) + cy;
 }
 
 // Creates the spacial grid for the balls
@@ -256,7 +364,7 @@ void buildBallGrid() {
     // Get a cell key for the ball
     int cx = floor(b.pos.x / cellSize);
     int cy = floor(b.pos.y / cellSize);
-    String key = cellKey(cx, cy);
+    int key = cellKey(cx, cy);
 
     // Use a HashMap to keep track of which cell balls are in
     if (!ballGrid.containsKey(key)) {
@@ -264,6 +372,24 @@ void buildBallGrid() {
     }
     ballGrid.get(key).add(b);
   }
+}
+
+// Runs when a key is pressed
+void keyPressed() {
+  if (key == 'd' || key == 'D') {
+    debug = !debug;
+  }
+}
+
+// Counts how many tracks there are
+int countTracks() {
+  int count = 0;
+  for (Track t : tracks) {
+    if (t != null) {
+      count++;
+    }
+  }
+  return count;
 }
 
 // Adds a track to the spacial grid
@@ -278,7 +404,7 @@ void addTrackToGrid(Track t) {
   // Cells are 64 pixels wide, this code would need to be updated if cell size was decreased or if track sizes were increased
   for (int cx = minCX; cx <= maxCX; cx++) {
     for (int cy = minCY; cy <= maxCY; cy++) {
-      String key = cellKey(cx, cy);
+      int key = cellKey(cx, cy);
       
       // Use a HashMap to keep track of which cells the track is in
       if (!trackGrid.containsKey(key)) {
@@ -321,7 +447,7 @@ void checkNearbyBallCollisions() {
     // Check the surrounding cells
     for (int gx = cx - 1; gx <= cx + 1; gx++) {
       for (int gy = cy - 1; gy <= cy + 1; gy++) {
-        String key = cellKey(gx, gy);
+        int key = cellKey(gx, gy);
 
         if (!ballGrid.containsKey(key)) continue;
         
@@ -334,4 +460,13 @@ void checkNearbyBallCollisions() {
       }
     }
   }
+}
+
+// Calculates the speed of the fatest ball
+float maxBallSpeed() {
+  float max = 0;
+  for (Ball b : balls) {
+    max = Math.max(max, b.vel.mag());
+  }
+  return max;
 }
