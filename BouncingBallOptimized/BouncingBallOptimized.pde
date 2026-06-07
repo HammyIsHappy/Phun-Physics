@@ -1,5 +1,5 @@
 // Isaiah Hamblin
-// Last Edit: 5/29/2026
+// Last Edit: 6/7/2026
 // This file serves as the backbone for the project, keeping track of spacial grids, creating tracks, buttons, adding balls, graphics, etc.
 
 import java.util.*;
@@ -14,6 +14,8 @@ boolean menuOpen = false;
 boolean wasPausedBeforeMenu = false;
 
 boolean debug = false;
+int fps;
+float fpsTime;
 
 PImage gearIcon;
 
@@ -39,12 +41,13 @@ HashMap<Integer, ArrayList<Track>> trackGrid = new HashMap<Integer, ArrayList<Tr
 void setup() {
   // Sets size, background color, framerate, gravity, and initilizes lastTime
   size(800, 600, P2D);
-  surface.setResizable(true);
   background(255);
   frameRate(60);
   globalAcc = new PVector(0, 700);
   // How many miliseconds the program has run for
   lastTime = millis();
+  
+  fpsTime = 0;
   
   gearIcon = loadImage("gear.png");
   
@@ -53,6 +56,9 @@ void setup() {
   trackLayer.beginDraw();
   trackLayer.background(255, 0);
   trackLayer.endDraw();
+
+  // Open the window not in the corner
+  surface.setLocation((displayWidth - width) / 2, (displayHeight - height) / 2);
 }
 
 // draw() runs each frame
@@ -91,13 +97,26 @@ void draw() {
   lastTime = currentTime;
   // If lag prevent large jumps in time
   dt = min(dt, 0.03);
+  fpsTime += dt;
 
   // Debug menu
   if (debug) {
     trackCount = countTracks();
+    
+    fill(0, 150);
+    rect(0, height - 70, 100, 70);
+  
     fill(0, 255, 128);
-    text("Ball Count: " + ballCount, 50, height - 20);
-    text("Track Count: " + trackCount, 50, height - 40);
+    textAlign(LEFT, TOP);
+    text("Ball Count: " + ballCount, 5, height - 20);
+    text("Track Count: " + trackCount, 5, height - 40);
+    
+    // Only update fps every quarter-second to keep reading smooth
+    if (fpsTime > 0.25) {
+      fpsTime = 0;
+      fps = (int) frameRate;
+    }
+    text("FPS: " + fps, 5, height - 60);
   }
   fill(0);
 

@@ -1,5 +1,5 @@
 // Isaiah Hamblin
-// Last Edit: 5/29/2026
+// Last Edit: 6/5/2026
 // Ball class contains constructor and methods to handle collisions
 
 class Ball {
